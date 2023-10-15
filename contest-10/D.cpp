@@ -1,5 +1,9 @@
-// no_concepts
-#pragma GCC optimize("Ofast,unroll-loops")
+// Нужно узнать, сколько существует потенциальных позиций МФТИ на
+// карте Москвы (прямоугольник размера n×m) и области, то есть таких
+// прямоугольников размера  a×b, что при наложении на него карты МФТИ,
+// совпадут условные обозначения во всех клетках, кроме может быть
+// одной.
+
 #include <cstring>
 #include <iostream>
 #include <queue>
@@ -14,20 +18,22 @@ void PrintVector(std::vector<T>& vec) {
 }
 
 const size_t kAlphSize = 26;
-const int k_alphabet[kAlphSize] = {0,  1,  2,  3,  4,  5,  6,  7,  8,
-                                   9,  10, 11, 12, 13, 14, 15, 16, 17,
-                                   18, 19, 20, 21, 22, 23, 24, 25};
+const int kAlphabet[kAlphSize] = {0,  1,  2,  3,  4,  5,  6,  7,  8,
+                                  9,  10, 11, 12, 13, 14, 15, 16, 17,
+                                  18, 19, 20, 21, 22, 23, 24, 25};
 std::vector<std::vector<int>> possible_match;
-size_t match_num = 0;
-int matches_treshold = 0;
+int threshold = 0;
+int match_num = 0;
+
 struct Node {
   int to[kAlphSize];
   bool term;
-  std::set<int> term_ind;
+  int sufflink;
+  std::vector<int> term_ind;
   int link;
   int go[kAlphSize];
   int cnt = 0;
-  std::set<size_t> cnt_indexes = {};
+  std::vector<size_t> cnt_indexes = {};
   Node() {
     memset(to, -1, sizeof(to));
     memset(go, -1, sizeof(go));
@@ -52,23 +58,24 @@ struct Trie {
       vertex = bor[vertex].to[str[i] - 'a'];
     }
     bor[vertex].term = true;
-    bor[vertex].term_ind.insert(ind);
+    bor[vertex].term_ind.push_back(ind);
   }
   void CntIndexesUpdate(int vertex_v) {
     if (bor[vertex_v].term) {
-      bor[vertex_v].cnt_indexes.insert(bor[vertex_v].term_ind.begin(),
-                                       bor[vertex_v].term_ind.end());
+      for (auto elem : bor[vertex_v].term_ind) {
+        bor[vertex_v].cnt_indexes.push_back(elem);
+      }
     }
     if (bor[vertex_v].link != -1) {
-      bor[vertex_v].cnt_indexes.insert(
-          bor[bor[vertex_v].link].cnt_indexes.begin(),
-          bor[bor[vertex_v].link].cnt_indexes.end());
+      for (auto elem : bor[bor[vertex_v].link].cnt_indexes) {
+        bor[vertex_v].cnt_indexes.push_back(elem);
+      }
     }
   }
 
   void Build() {
     bor[0].link = -1;
-    for (auto character : k_alphabet) {
+    for (auto character : kAlphabet) {
       if (bor[0].to[character] != -1) {
         bor[0].go[character] = bor[0].to[character];
       } else {
@@ -84,14 +91,14 @@ struct Trie {
       bor[vertex_v].cnt =
           (bor[vertex_v].term ? 1 : 0) +
           (bor[vertex_v].link == -1 ? 0 : bor[bor[vertex_v].link].cnt);
-      for (auto character1 : k_alphabet) {
+      for (auto character1 : kAlphabet) {
         int vertex_u = bor[vertex_v].to[character1];
         if (vertex_u == -1) {
           continue;
         }
         bor[vertex_u].link =
             (vertex_v == 0 ? 0 : bor[bor[vertex_v].link].go[character1]);
-        for (auto character2 : k_alphabet) {
+        for (auto character2 : kAlphabet) {
           if (bor[vertex_u].to[character2] != -1) {
             bor[vertex_u].go[character2] = bor[vertex_u].to[character2];
           } else {
@@ -104,8 +111,8 @@ struct Trie {
     }
   }
 
-  void FindAllMatches(std::string& text, size_t pos, int treshold, size_t shift,
-                      std::string& type) {
+  void FindAllMatches(std::string& text, size_t pos, size_t treshold,
+                      size_t shift, std::string& type) {
     int vertex = 0;
     for (size_t i = 0; i < text.length(); ++i) {
       vertex = bor[vertex].go[text[i] - 'a'];
@@ -115,14 +122,14 @@ struct Trie {
           continue;
         }
         if (type == "rows") {
-          // ++possible_match[pos - ind][i + 1 - shift];
-          if (++possible_match[pos - ind][i + 1 - shift] == matches_treshold) {
+          ++possible_match[pos - ind][i + 1 - shift];
+          if (possible_match[pos - ind][i + 1 - shift] == threshold) {
             ++match_num;
           }
         }
         if (type == "columns") {
-          // ++possible_match[i + 1 - shift][pos - ind];
-          if (++possible_match[i + 1 - shift][pos - ind] == matches_treshold) {
+          ++possible_match[i + 1 - shift][pos - ind];
+          if (possible_match[i + 1 - shift][pos - ind] == threshold) {
             ++match_num;
           }
         }
@@ -144,10 +151,10 @@ size_t CountMatchesNum(std::vector<std::vector<int>>& possible_match,
   return match_num;
 }
 
-void FindMapsMatchNum(std::vector<std::string> moscow_rows,
-                      std::vector<std::string> moscow_columns,
-                      std::vector<std::string> mipt_rows,
-                      std::vector<std::string> mipt_columns) {
+void Katya(std::vector<std::string>& moscow_rows,
+           std::vector<std::string>& moscow_columns,
+           std::vector<std::string>& mipt_rows,
+           std::vector<std::string>& mipt_columns) {
   Trie trie_rows;
   Trie trie_columns;
   for (size_t i = 0; i < mipt_rows.size(); ++i) {
@@ -170,10 +177,6 @@ void FindMapsMatchNum(std::vector<std::string> moscow_rows,
     trie_columns.FindAllMatches(moscow_columns[i], i, moscow_columns.size(),
                                 mipt_rows.size(), type);
   }
-  // size_t match_num =
-  //     CountMatchesNum(possible_match, mipt_columns.size() +
-  //      mipt_rows.size());
-  // return match_num;
 }
 
 int main() {
@@ -197,7 +200,11 @@ int main() {
   size_t mipt_map_height;
   size_t mipt_map_width;
   std::cin >> mipt_map_height >> mipt_map_width;
-  matches_treshold = mipt_map_height + mipt_map_width - 2;
+  threshold = mipt_map_height + mipt_map_width - 2;
+  if (threshold == 0) {
+    std::cout << moscow_map_height * moscow_map_width;
+    return 0;
+  }
   std::vector<std::string> mipt_rows(mipt_map_height);
   std::vector<std::string> mipt_columns(mipt_map_width);
   for (size_t i = 0; i < mipt_map_height; ++i) {
@@ -208,10 +215,6 @@ int main() {
       mipt_columns[jj] += row[jj];
     }
   }
-  if (matches_treshold == 0) {
-    std::cout << moscow_map_height * moscow_map_width;
-    return 0;
-  }
-  FindMapsMatchNum(moscow_rows, moscow_columns, mipt_rows, mipt_columns);
+  Katya(moscow_rows, moscow_columns, mipt_rows, mipt_columns);
   std::cout << match_num;
 }
